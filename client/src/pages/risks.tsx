@@ -1,0 +1,268 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, Search, Download, Edit, Trash2, Filter } from "lucide-react";
+import type { RiskRecord } from "@shared/schema";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+export default function RiskRegister() {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  const { data: risks, isLoading } = useQuery<RiskRecord[]>({
+    queryKey: ["/api/risks"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/risks/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/risks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/risks/statistics"] });
+      toast({
+        title: "Risk deleted",
+        description: "The risk record has been successfully deleted.",
+      });
+      setDeleteId(null);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete risk record.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getRiskLevel = (score: number) => {
+    if (score >= 70) return { label: "High", variant: "destructive" as const };
+    if (score >= 40) return { label: "Medium", variant: "secondary" as const };
+    return { label: "Low", variant: "default" as const };
+  };
+
+  const filteredRisks = (risks || []).filter((risk) => {
+    const matchesSearch =
+      search === "" ||
+      risk.riskType.toLowerCase().includes(search.toLowerCase()) ||
+      risk.businessUnit.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || risk.status === statusFilter;
+    const matchesCategory = categoryFilter === "all" || risk.riskCategory === categoryFilter;
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
+
+  const exportToCSV = () => {
+    const headers = ["ID", "Type", "Category", "Business Unit", "Likelihood", "Impact", "Status", "Date Reported"];
+    const rows = filteredRisks.map((r) => [
+      r.id,
+      r.riskType,
+      r.riskCategory,
+      r.businessUnit,
+      r.likelihood,
+      r.impact,
+      r.status,
+      r.dateReported,
+    ]);
+    const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "risk-register.csv";
+    a.click();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-12 w-64" />
+        <Skeleton className="h-96" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Risk Register</h1>
+          <p className="text-muted-foreground mt-2">Manage and monitor all identified risks</p>
+        </div>
+        <Link href="/risks/new">
+          <Button data-testid="button-add-risk">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Risk
+          </Button>
+        </Link>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <CardTitle>All Risks ({filteredRisks.length})</CardTitle>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search risks..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
+                  <Filter className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Open">Open</SelectItem>
+                  <SelectItem value="Mitigating">Mitigating</SelectItem>
+                  <SelectItem value="Closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[160px]" data-testid="select-category-filter">
+                  <Filter className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="Operational">Operational</SelectItem>
+                  <SelectItem value="Financial">Financial</SelectItem>
+                  <SelectItem value="Strategic">Strategic</SelectItem>
+                  <SelectItem value="Compliance">Compliance</SelectItem>
+                  <SelectItem value="Technology">Technology</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={exportToCSV} data-testid="button-export">
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Risk Type</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Business Unit</TableHead>
+                  <TableHead className="text-right">Likelihood</TableHead>
+                  <TableHead className="text-right">Impact</TableHead>
+                  <TableHead className="text-right">Risk Score</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRisks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                      No risks found. Click "Add Risk" to create one.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredRisks.map((risk) => {
+                    const score = Number(risk.inherentRisk || 0);
+                    const level = getRiskLevel(score);
+                    return (
+                      <TableRow key={risk.id} data-testid={`row-risk-${risk.id}`}>
+                        <TableCell className="font-medium">{risk.id}</TableCell>
+                        <TableCell>{risk.riskType}</TableCell>
+                        <TableCell>{risk.riskCategory}</TableCell>
+                        <TableCell>{risk.businessUnit}</TableCell>
+                        <TableCell className="text-right">{risk.likelihood}</TableCell>
+                        <TableCell className="text-right">{risk.impact}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={level.variant}>{score.toFixed(0)}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{risk.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Link href={`/risks/${risk.id}/edit`}>
+                              <Button variant="ghost" size="icon" data-testid={`button-edit-${risk.id}`}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteId(risk.id)}
+                              data-testid={`button-delete-${risk.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the risk record.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteId && deleteMutation.mutate(deleteId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
