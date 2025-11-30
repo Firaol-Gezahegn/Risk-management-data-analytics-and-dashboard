@@ -143,6 +143,7 @@ export default function Admin() {
                         <Input
                           id="password"
                           type="password"
+                          minLength={6}
                           value={newUser.password}
                           onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                           required

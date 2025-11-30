@@ -98,6 +98,9 @@ export const insertRiskRecordSchema = createInsertSchema(riskRecords, {
   department: z.string().min(1),
   likelihood: z.coerce.number().min(0).max(100),
   impact: z.coerce.number().min(0).max(100),
+  inherentRisk: z.coerce.number().optional().nullable(),
+  residualRisk: z.coerce.number().optional().nullable(),
+  riskScore: z.coerce.number().optional().nullable(),
   status: z.enum(["Open", "Mitigating", "Closed"]),
   dateReported: z.string(),
 }).omit({ id: true, createdAt: true, updatedAt: true });

@@ -4,10 +4,18 @@ import { storage } from "./storage";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { loginSchema, insertUserSchema, insertRiskRecordSchema } from "@shared/schema";
+import { z } from "zod";
 import multer from "multer";
 
 const JWT_SECRET = process.env.JWT_SECRET || "awash-bank-risk-management-secret-key-change-in-production";
 const upload = multer({ storage: multer.memoryStorage() });
+const createUserInputSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(2),
+  password: z.string().min(6),
+  role: z.enum(["superadmin", "risk_admin", "business_user", "reviewer", "auditor"]),
+  department: z.string().min(2),
+});
 
 // Middleware to verify JWT token
 interface AuthRequest extends Request {
@@ -145,12 +153,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     requireRole("superadmin"),
     async (req: AuthRequest, res: Response) => {
       try {
-        const userData = insertUserSchema.parse(req.body);
-        const hashedPassword = await bcrypt.hash(userData.passwordHash, 10);
+        const payload = createUserInputSchema.parse(req.body);
+        const hashedPassword = await bcrypt.hash(payload.password, 10);
 
         const user = await storage.createUser({
-          ...userData,
+          email: payload.email,
+          name: payload.name,
           passwordHash: hashedPassword,
+          role: payload.role,
+          department: payload.department,
         });
 
         await logAudit(req.userId, "CREATE", "user", user.id, { email: user.email });

@@ -59,11 +59,15 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-6">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-            <Shield className="h-6 w-6 text-primary-foreground" />
-          </div>
-          <div>
+        <div className="flex flex-col items-center gap-3">
+            <div className="mx-auto h-16 w-16 rounded-xl bg-primary flex items-center justify-center overflow-hidden">
+              <img
+                src="/favicon.png"
+                alt="Awash Bank Logo"
+                className="h-full w-full object-cover"
+              />
+              </div>
+            <div>
             <h2 className="font-bold text-lg">Awash Bank</h2>
             <p className="text-xs text-muted-foreground">Risk Management</p>
           </div>

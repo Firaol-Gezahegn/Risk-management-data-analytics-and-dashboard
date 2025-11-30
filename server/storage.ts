@@ -158,12 +158,14 @@ export class DatabaseStorage implements IStorage {
     }
 
     const total = records.length;
-    const high = records.filter(r => Number(r.inherentRisk || 0) >= 70).length;
-    const medium = records.filter(r => {
-      const score = Number(r.inherentRisk || 0);
-      return score >= 40 && score < 70;
-    }).length;
-    const low = records.filter(r => Number(r.inherentRisk || 0) < 40).length;
+    const scores = records.map((record) => ({
+      record,
+      score: calculateRiskScore(record),
+    }));
+
+    const high = scores.filter(({ score }) => score >= 70).length;
+    const medium = scores.filter(({ score }) => score >= 40 && score < 70).length;
+    const low = scores.filter(({ score }) => score < 40).length;
 
     const byStatus: Record<string, number> = {};
     const byCategory: Record<string, number> = {};
@@ -207,22 +209,24 @@ export class DatabaseStorage implements IStorage {
     
     for (const staging of stagingRecords) {
       const rawData = staging.rawRow as any;
+      const normalized = normalizeRecord(rawData);
       
       try {
         await db.insert(riskRecords).values({
-          riskType: rawData.riskType || rawData.risk_type || "Unknown",
-          riskCategory: rawData.riskCategory || rawData.risk_category || "Operational",
-          businessUnit: rawData.businessUnit || rawData.business_unit || "General",
-          department: rawData.department || "General",
-          likelihood: rawData.likelihood || "50",
-          impact: rawData.impact || "50",
-          inherentRisk: rawData.inherentRisk || "25",
-          residualRisk: rawData.residualRisk || null,
-          riskScore: rawData.riskScore || "25",
-          status: rawData.status || "Open",
-          dateReported: rawData.dateReported || rawData.date_reported || new Date().toISOString().split("T")[0],
-          description: rawData.description || null,
-          mitigationPlan: rawData.mitigationPlan || rawData.mitigation_plan || null,
+          riskType: getField(normalized, ["risktype", "type", "risk"], "Unknown"),
+          riskCategory: getField(normalized, ["riskcategory", "category"], "Operational"),
+          businessUnit: getField(normalized, ["businessunit", "unit", "businessline"], "General"),
+          department: getField(normalized, ["department", "dept", "division"], "General"),
+          likelihood: getField(normalized, ["likelihood", "probability"], "50"),
+          impact: getField(normalized, ["impact", "severity"], "50"),
+          inherentRisk: getField(normalized, ["inherentrisk", "inherent"], "25"),
+          residualRisk: getField(normalized, ["residualrisk", "residual"], null),
+          riskScore: getField(normalized, ["riskscore", "score"], "25"),
+          status: getField(normalized, ["status", "state"], "Open"),
+          dateReported:
+            getField(normalized, ["datereported", "reporteddate", "date", "reportdate"], new Date().toISOString().split("T")[0]),
+          description: getField(normalized, ["description", "details", "summary"], null),
+          mitigationPlan: getField(normalized, ["mitigationplan", "plan", "response"], null),
         });
       } catch (error) {
         console.error("Error importing staging record:", error);
@@ -258,3 +262,37 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+function normalizeKey(key: string) {
+  return key.toLowerCase().replace(/[\s_-]/g, "");
+}
+
+function normalizeRecord(record: Record<string, any>) {
+  const normalized: Record<string, any> = {};
+  for (const [key, value] of Object.entries(record || {})) {
+    normalized[normalizeKey(key)] = value;
+  }
+  return normalized;
+}
+
+function getField(record: Record<string, any>, aliases: string[], fallback: any) {
+  for (const alias of aliases) {
+    const value = record[normalizeKey(alias)];
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+  return fallback;
+}
+
+function calculateRiskScore(record: RiskRecord) {
+  const inherent = Number(record.inherentRisk);
+  if (Number.isFinite(inherent) && !Number.isNaN(inherent)) {
+    return inherent;
+  }
+
+  const likelihood = Number(record.likelihood || 0);
+  const impact = Number(record.impact || 0);
+  const derived = (likelihood * impact) / 100;
+  return Number.isFinite(derived) ? derived : 0;
+}

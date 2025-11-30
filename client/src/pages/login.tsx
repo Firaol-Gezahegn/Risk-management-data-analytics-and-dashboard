@@ -42,9 +42,13 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto h-16 w-16 rounded-xl bg-primary flex items-center justify-center">
-            <Shield className="h-10 w-10 text-primary-foreground" />
-          </div>
+            <div className="mx-auto h-16 w-16 rounded-xl bg-primary flex items-center justify-center overflow-hidden">
+              <img
+                src="/favicon.png"
+                alt="Awash Bank Logo"
+                className="h-full w-full object-cover"
+              />
+            </div>
           <div>
             <CardTitle className="text-2xl font-bold">Awash Bank</CardTitle>
             <CardDescription className="text-base mt-2">Risk Management Dashboard</CardDescription>
@@ -86,10 +90,7 @@ export default function Login() {
               Sign In
             </Button>
           </form>
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Demo Credentials:</p>
-            <p className="font-mono text-xs mt-1">admin@awashbank.com / admin123</p>
-          </div>
+
         </CardContent>
       </Card>
     </div>
