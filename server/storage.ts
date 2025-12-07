@@ -16,6 +16,17 @@ import {
   type InsertEmailReport,
   type RiskStatistics,
 } from "@shared/schema";
+import {
+  riskCollaborators,
+  rcsaAssessments,
+  riskResponseProgress,
+  type RiskCollaborator,
+  type InsertRiskCollaborator,
+  type RcsaAssessment,
+  type InsertRcsaAssessment,
+  type RiskResponseProgress,
+  type InsertRiskResponseProgress,
+} from "@shared/schema-additions";
 import { db } from "./db";
 import { eq, desc, sql, and } from "drizzle-orm";
 
@@ -30,10 +41,22 @@ export interface IStorage {
   // Risk Records
   getRiskRecord(id: number): Promise<RiskRecord | undefined>;
   getAllRiskRecords(filters?: { department?: string; role?: string }): Promise<RiskRecord[]>;
-  createRiskRecord(record: InsertRiskRecord): Promise<RiskRecord>;
+  createRiskRecord(record: InsertRiskRecord & { riskId?: string }): Promise<RiskRecord>;
   updateRiskRecord(id: number, updates: Partial<RiskRecord>): Promise<RiskRecord | undefined>;
   deleteRiskRecord(id: number): Promise<boolean>;
   getRiskStatistics(filters?: { department?: string }): Promise<RiskStatistics>;
+
+  // Collaborators
+  getRiskCollaborators(riskId: number): Promise<any[]>;
+  setRiskCollaborators(riskId: number, userIds: string[]): Promise<void>;
+
+  // RCSA
+  getRcsaAssessments(riskId: number): Promise<RcsaAssessment[]>;
+  createRcsaAssessment(assessment: InsertRcsaAssessment): Promise<RcsaAssessment>;
+
+  // Risk Response Progress
+  getRiskResponseProgress(riskId: number): Promise<RiskResponseProgress[]>;
+  createRiskResponseProgress(progress: InsertRiskResponseProgress): Promise<RiskResponseProgress>;
 
   // Ingestion Staging
   getStagingData(): Promise<IngestionStaging[]>;
@@ -98,7 +121,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllRiskRecords(filters?: { department?: string; role?: string }): Promise<RiskRecord[]> {
-    let query = db.select().from(riskRecords).orderBy(desc(riskRecords.createdAt));
+    let query = db.select().from(riskRecords)
+      .where(eq(riskRecords.isDeleted, false))
+      .orderBy(desc(riskRecords.createdAt));
     
     if (filters?.department && filters.role !== "superadmin" && filters.role !== "auditor") {
       const records = await query;
@@ -108,17 +133,10 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
-  async createRiskRecord(record: InsertRiskRecord): Promise<RiskRecord> {
-    const inherentRisk = (Number(record.likelihood) * Number(record.impact)) / 100;
-    const riskScore = inherentRisk;
-    
+  async createRiskRecord(record: InsertRiskRecord & { riskId?: string }): Promise<RiskRecord> {
     const [newRecord] = await db
       .insert(riskRecords)
-      .values({
-        ...record,
-        inherentRisk: inherentRisk.toFixed(2),
-        riskScore: riskScore.toFixed(2),
-      })
+      .values(record as any)
       .returning();
     return newRecord;
   }
@@ -146,12 +164,79 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteRiskRecord(id: number): Promise<boolean> {
-    const result = await db.delete(riskRecords).where(eq(riskRecords.id, id));
+    // Soft delete
+    await db
+      .update(riskRecords)
+      .set({ isDeleted: true, updatedAt: new Date() })
+      .where(eq(riskRecords.id, id));
     return true;
   }
 
+  // Collaborators
+  async getRiskCollaborators(riskId: number): Promise<any[]> {
+    const collaborators = await db
+      .select({
+        id: riskCollaborators.id,
+        userId: riskCollaborators.userId,
+        userName: users.name,
+        userEmail: users.email,
+        userDepartment: users.department,
+      })
+      .from(riskCollaborators)
+      .leftJoin(users, eq(riskCollaborators.userId, users.id))
+      .where(eq(riskCollaborators.riskId, riskId));
+    
+    return collaborators;
+  }
+
+  async setRiskCollaborators(riskId: number, userIds: string[]): Promise<void> {
+    // Remove existing collaborators
+    await db.delete(riskCollaborators).where(eq(riskCollaborators.riskId, riskId));
+    
+    // Add new collaborators
+    if (userIds.length > 0) {
+      await db.insert(riskCollaborators).values(
+        userIds.map(userId => ({ riskId, userId }))
+      );
+    }
+  }
+
+  // RCSA
+  async getRcsaAssessments(riskId: number): Promise<RcsaAssessment[]> {
+    return await db
+      .select()
+      .from(rcsaAssessments)
+      .where(eq(rcsaAssessments.riskId, riskId))
+      .orderBy(desc(rcsaAssessments.createdAt));
+  }
+
+  async createRcsaAssessment(assessment: InsertRcsaAssessment): Promise<RcsaAssessment> {
+    const [newAssessment] = await db
+      .insert(rcsaAssessments)
+      .values(assessment as any)
+      .returning();
+    return newAssessment;
+  }
+
+  // Risk Response Progress
+  async getRiskResponseProgress(riskId: number): Promise<RiskResponseProgress[]> {
+    return await db
+      .select()
+      .from(riskResponseProgress)
+      .where(eq(riskResponseProgress.riskId, riskId))
+      .orderBy(desc(riskResponseProgress.createdAt));
+  }
+
+  async createRiskResponseProgress(progress: InsertRiskResponseProgress): Promise<RiskResponseProgress> {
+    const [newProgress] = await db
+      .insert(riskResponseProgress)
+      .values(progress as any)
+      .returning();
+    return newProgress;
+  }
+
   async getRiskStatistics(filters?: { department?: string }): Promise<RiskStatistics> {
-    let records = await db.select().from(riskRecords);
+    let records = await db.select().from(riskRecords).where(eq(riskRecords.isDeleted, false));
     
     if (filters?.department) {
       records = records.filter(r => r.department === filters.department);
@@ -213,11 +298,13 @@ export class DatabaseStorage implements IStorage {
       
       try {
         await db.insert(riskRecords).values({
+          riskTitle: getField(normalized, ["risktitle", "title"], "Imported Risk"),
           riskType: getField(normalized, ["risktype", "type", "risk"], "Unknown"),
           riskCategory: getField(normalized, ["riskcategory", "category"], "Operational"),
           businessUnit: getField(normalized, ["businessunit", "unit", "businessline"], "General"),
           department: getField(normalized, ["department", "dept", "division"], "General"),
           likelihood: getField(normalized, ["likelihood", "probability"], "50"),
+          levelOfImpact: getField(normalized, ["levelofimpact", "impact", "severity"], "50"),
           impact: getField(normalized, ["impact", "severity"], "50"),
           inherentRisk: getField(normalized, ["inherentrisk", "inherent"], "25"),
           residualRisk: getField(normalized, ["residualrisk", "residual"], null),

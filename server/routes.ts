@@ -6,6 +6,15 @@ import bcrypt from "bcryptjs";
 import { loginSchema, insertUserSchema, insertRiskRecordSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
+import { 
+  getAzureADAuthUrl, 
+  exchangeAzureADCode, 
+  syncADUser, 
+  generateADToken,
+  isADConfigured 
+} from "./auth-ad";
+import { computeRiskScores } from "@shared/risk-scoring";
+import { generateRiskId, regenerateRiskIdIfNeeded, getAllDepartmentCodes } from "./risk-id-generator";
 
 const JWT_SECRET = process.env.JWT_SECRET || "awash-bank-risk-management-secret-key-change-in-production";
 const upload = multer({ storage: multer.memoryStorage() });
@@ -115,6 +124,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Login error:", error);
       res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  // Active Directory authentication routes
+  app.get("/api/auth/ad/config", (req: Request, res: Response) => {
+    res.json({ enabled: isADConfigured() });
+  });
+
+  app.get("/api/auth/ad/login", (req: Request, res: Response) => {
+    if (!isADConfigured()) {
+      return res.status(400).json({ message: "Azure AD not configured" });
+    }
+    
+    const authUrl = getAzureADAuthUrl();
+    res.json({ authUrl });
+  });
+
+  app.get("/api/auth/ad/callback", async (req: Request, res: Response) => {
+    try {
+      const { code } = req.query;
+      
+      if (!code || typeof code !== "string") {
+        return res.status(400).json({ message: "Authorization code missing" });
+      }
+
+      // Exchange code for user info
+      const adUserInfo = await exchangeAzureADCode(code);
+      
+      // Sync user with database
+      const user = await syncADUser(adUserInfo);
+      
+      // Generate JWT token
+      const token = generateADToken(user);
+      
+      await logAudit(user.id, "LOGIN_AD", "auth", user.id);
+      
+      const { passwordHash, ...userWithoutPassword } = user;
+      
+      // Redirect to frontend with token
+      res.redirect(`/?token=${token}&user=${encodeURIComponent(JSON.stringify(userWithoutPassword))}`);
+    } catch (error) {
+      console.error("AD callback error:", error);
+      res.redirect("/?error=ad_auth_failed");
     }
   });
 
@@ -249,6 +301,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Risk scoring computation endpoint
+  app.post("/api/risks/compute-scores", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const { likelihood, impact, controlEffectiveness } = req.body;
+      
+      if (typeof likelihood !== "number" || typeof impact !== "number") {
+        return res.status(400).json({ message: "Likelihood and impact are required" });
+      }
+      
+      const scores = computeRiskScores(
+        likelihood,
+        impact,
+        controlEffectiveness !== undefined ? controlEffectiveness : undefined
+      );
+      
+      res.json(scores);
+    } catch (error) {
+      console.error("Compute scores error:", error);
+      res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
   app.post(
     "/api/risks",
     authMiddleware,
@@ -256,7 +330,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req: AuthRequest, res: Response) => {
       try {
         const riskData = insertRiskRecordSchema.parse(req.body);
-        const risk = await storage.createRiskRecord(riskData);
+        
+        // Generate risk ID
+        const riskId = await generateRiskId(riskData.department);
+        
+        // Compute risk scores using 5x5 matrix
+        const scores = computeRiskScores(
+          Number(riskData.likelihood),
+          Number(riskData.levelOfImpact || riskData.impact),
+          riskData.controlEffectivenessScore ? Number(riskData.controlEffectivenessScore) : undefined
+        );
+        
+        const risk = await storage.createRiskRecord({
+          ...riskData,
+          riskId,
+          inherentRisk: Number(scores.inherentRisk.score.toFixed(2)),
+          residualRisk: scores.residualRisk ? Number(scores.residualRisk.score.toFixed(2)) : null,
+          riskScore: Number(scores.riskScore.toFixed(2)),
+        });
 
         await logAudit(req.userId, "CREATE", "risk", risk.id.toString(), riskData);
 
@@ -288,6 +379,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           existingRisk.department !== req.userDepartment
         ) {
           return res.status(403).json({ message: "Access denied" });
+        }
+
+        // Regenerate risk ID if department changed
+        if (updates.department && updates.department !== existingRisk.department) {
+          const newRiskId = await regenerateRiskIdIfNeeded(
+            id,
+            existingRisk.department,
+            updates.department
+          );
+          if (newRiskId) {
+            updates.riskId = newRiskId;
+          }
+        }
+
+        // Recompute scores if relevant fields changed
+        if (updates.likelihood !== undefined || updates.levelOfImpact !== undefined || 
+            updates.impact !== undefined || updates.controlEffectivenessScore !== undefined) {
+          const likelihood = updates.likelihood !== undefined ? Number(updates.likelihood) : Number(existingRisk.likelihood);
+          const impact = updates.levelOfImpact !== undefined ? Number(updates.levelOfImpact) : 
+                        (updates.impact !== undefined ? Number(updates.impact) : Number(existingRisk.impact));
+          const controlEffectiveness = updates.controlEffectivenessScore !== undefined ? 
+                                      Number(updates.controlEffectivenessScore) : 
+                                      (existingRisk.controlEffectivenessScore ? Number(existingRisk.controlEffectivenessScore) : undefined);
+          
+          const scores = computeRiskScores(likelihood, impact, controlEffectiveness);
+          updates.inherentRisk = Number(scores.inherentRisk.score.toFixed(2));
+          updates.residualRisk = scores.residualRisk ? Number(scores.residualRisk.score.toFixed(2)) : null;
+          updates.riskScore = Number(scores.riskScore.toFixed(2));
         }
 
         const risk = await storage.updateRiskRecord(id, updates);
@@ -418,6 +537,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json(logs);
       } catch (error) {
         res.status(500).json({ message: "Server error" });
+      }
+    }
+  );
+
+  // Department codes routes
+  app.get("/api/department-codes", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const codes = getAllDepartmentCodes();
+      res.json(codes);
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Collaborators routes
+  app.get("/api/risks/:id/collaborators", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const riskId = parseInt(req.params.id);
+      const collaborators = await storage.getRiskCollaborators(riskId);
+      res.json(collaborators);
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post(
+    "/api/risks/:id/collaborators",
+    authMiddleware,
+    requireRole("superadmin", "risk_admin", "business_user"),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const riskId = parseInt(req.params.id);
+        const { userIds } = req.body;
+
+        if (!Array.isArray(userIds)) {
+          return res.status(400).json({ message: "userIds must be an array" });
+        }
+
+        await storage.setRiskCollaborators(riskId, userIds);
+        await logAudit(req.userId, "UPDATE_COLLABORATORS", "risk", riskId.toString(), { userIds });
+
+        res.json({ message: "Collaborators updated" });
+      } catch (error) {
+        console.error("Update collaborators error:", error);
+        res.status(400).json({ message: "Invalid request" });
+      }
+    }
+  );
+
+  // RCSA routes
+  app.get("/api/risks/:id/rcsa", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const riskId = parseInt(req.params.id);
+      const assessments = await storage.getRcsaAssessments(riskId);
+      res.json(assessments);
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post(
+    "/api/risks/:id/rcsa",
+    authMiddleware,
+    requireRole("superadmin", "risk_admin", "business_user", "reviewer"),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const riskId = parseInt(req.params.id);
+        const assessmentData = req.body;
+
+        const assessment = await storage.createRcsaAssessment({
+          ...assessmentData,
+          riskId,
+          assessedBy: req.userId,
+        });
+
+        await logAudit(req.userId, "CREATE_RCSA", "risk", riskId.toString(), assessmentData);
+
+        res.status(201).json(assessment);
+      } catch (error) {
+        console.error("Create RCSA error:", error);
+        res.status(400).json({ message: "Invalid request" });
+      }
+    }
+  );
+
+  // Risk response progress routes
+  app.get("/api/risks/:id/progress", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const riskId = parseInt(req.params.id);
+      const progress = await storage.getRiskResponseProgress(riskId);
+      res.json(progress);
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post(
+    "/api/risks/:id/progress",
+    authMiddleware,
+    requireRole("superadmin", "risk_admin", "business_user"),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const riskId = parseInt(req.params.id);
+        const progressData = req.body;
+
+        const progress = await storage.createRiskResponseProgress({
+          ...progressData,
+          riskId,
+          updatedBy: req.userId,
+        });
+
+        await logAudit(req.userId, "CREATE_PROGRESS", "risk", riskId.toString(), progressData);
+
+        res.status(201).json(progress);
+      } catch (error) {
+        console.error("Create progress error:", error);
+        res.status(400).json({ message: "Invalid request" });
       }
     }
   );

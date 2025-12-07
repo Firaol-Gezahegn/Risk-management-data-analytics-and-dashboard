@@ -81,6 +81,7 @@ function Router() {
                 <Route path="/risks" component={() => <ProtectedRoute component={RiskRegister} />} />
                 <Route path="/risks/new" component={() => <ProtectedRoute component={RiskForm} />} />
                 <Route path="/risks/:id/edit" component={() => <ProtectedRoute component={RiskForm} />} />
+                <Route path="/risks/:id/details" component={() => <ProtectedRoute component={RiskForm} />} />
                 <Route path="/upload" component={() => <ProtectedRoute component={FileUpload} />} />
                 <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
                 <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />

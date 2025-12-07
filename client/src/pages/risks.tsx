@@ -74,24 +74,29 @@ export default function RiskRegister() {
   };
 
   const filteredRisks = (risks || []).filter((risk) => {
+    const searchText = search.toLowerCase();
     const matchesSearch =
       search === "" ||
-      risk.riskType.toLowerCase().includes(search.toLowerCase()) ||
-      risk.businessUnit.toLowerCase().includes(search.toLowerCase());
+      (risk.riskType && risk.riskType.toLowerCase().includes(searchText)) ||
+      (risk.riskTitle && risk.riskTitle.toLowerCase().includes(searchText)) ||
+      (risk.businessUnit && risk.businessUnit.toLowerCase().includes(searchText)) ||
+      (risk.department && risk.department.toLowerCase().includes(searchText));
     const matchesStatus = statusFilter === "all" || risk.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || risk.riskCategory === categoryFilter;
     return matchesSearch && matchesStatus && matchesCategory;
   });
 
   const exportToCSV = () => {
-    const headers = ["ID", "Type", "Category", "Business Unit", "Likelihood", "Impact", "Status", "Date Reported"];
+    const headers = ["Risk ID", "Title", "Type", "Category", "Department", "Likelihood", "Impact", "Risk Score", "Status", "Date Reported"];
     const rows = filteredRisks.map((r) => [
-      r.id,
+      r.riskId || r.id,
+      r.riskTitle || r.description || r.riskType,
       r.riskType,
       r.riskCategory,
-      r.businessUnit,
+      r.department,
       r.likelihood,
-      r.impact,
+      r.impact || r.levelOfImpact,
+      r.riskScore || r.inherentRisk,
       r.status,
       r.dateReported,
     ]);
@@ -181,10 +186,10 @@ export default function RiskRegister() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Risk Type</TableHead>
+                  <TableHead>Risk ID</TableHead>
+                  <TableHead>Title</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Business Unit</TableHead>
+                  <TableHead>Department</TableHead>
                   <TableHead className="text-right">Likelihood</TableHead>
                   <TableHead className="text-right">Impact</TableHead>
                   <TableHead className="text-right">Risk Score</TableHead>
@@ -201,16 +206,19 @@ export default function RiskRegister() {
                   </TableRow>
                 ) : (
                   filteredRisks.map((risk) => {
-                    const score = Number(risk.inherentRisk || 0);
+                    const score = Number(risk.riskScore || risk.inherentRisk || 0);
                     const level = getRiskLevel(score);
+                    const displayTitle = risk.riskTitle || risk.description || risk.riskType || 'Untitled';
+                    const displayId = risk.riskId || `#${risk.id}`;
+                    
                     return (
                       <TableRow key={risk.id} data-testid={`row-risk-${risk.id}`}>
-                        <TableCell className="font-medium">{risk.id}</TableCell>
-                        <TableCell>{risk.riskType}</TableCell>
+                        <TableCell className="font-medium">{displayId}</TableCell>
+                        <TableCell className="max-w-xs truncate">{displayTitle}</TableCell>
                         <TableCell>{risk.riskCategory}</TableCell>
-                        <TableCell>{risk.businessUnit}</TableCell>
-                        <TableCell className="text-right">{risk.likelihood}</TableCell>
-                        <TableCell className="text-right">{risk.impact}</TableCell>
+                        <TableCell>{risk.department}</TableCell>
+                        <TableCell className="text-right">{Number(risk.likelihood).toFixed(0)}</TableCell>
+                        <TableCell className="text-right">{Number(risk.impact || risk.levelOfImpact || 0).toFixed(0)}</TableCell>
                         <TableCell className="text-right">
                           <Badge variant={level.variant}>{score.toFixed(0)}</Badge>
                         </TableCell>

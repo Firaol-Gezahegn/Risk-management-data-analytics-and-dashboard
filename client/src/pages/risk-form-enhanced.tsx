@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { insertRiskRecordSchema, type RiskRecord } from "@shared/schema";
-import { Loader2, Calculator } from "lucide-react";
+import { Loader2, AlertCircle, Calculator } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { z } from "zod";
 
@@ -46,7 +46,7 @@ const enhancedRiskSchema = insertRiskRecordSchema.extend({
   justification: z.string().optional(),
 });
 
-export default function RiskForm() {
+export default function RiskFormEnhanced() {
   const params = useParams();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -107,7 +107,7 @@ export default function RiskForm() {
         controlEffectivenessScore: Number(existingRisk.controlEffectivenessScore || 0),
         justification: existingRisk.justification || "",
         residualRisk: Number(existingRisk.residualRisk || 0),
-        status: existingRisk.status as any,
+        status: existingRisk.status as "Open" | "Mitigating" | "Closed",
         dateReported: existingRisk.dateReported,
         description: existingRisk.description || "",
         mitigationPlan: existingRisk.mitigationPlan || "",
@@ -493,7 +493,7 @@ export default function RiskForm() {
                     />
                   </div>
 
-                  {computedScores && computedScores.inherentRisk && (
+                  {computedScores && (
                     <Alert className="border-primary">
                       <Calculator className="h-4 w-4" />
                       <AlertDescription>
@@ -523,16 +523,6 @@ export default function RiskForm() {
                             </div>
                           )}
                         </div>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  
-                  {likelihood > 0 && levelOfImpact > 0 && !computedScores && (
-                    <Alert>
-                      <AlertDescription>
-                        <p className="text-sm text-muted-foreground">
-                          ⚠️ Risk scoring requires database migration. Run: <code className="bg-muted px-2 py-1 rounded">npm run migrate</code>
-                        </p>
                       </AlertDescription>
                     </Alert>
                   )}

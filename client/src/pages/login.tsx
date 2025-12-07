@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Loader2 } from "lucide-react";
+import { Shield, Loader2, Building2 } from "lucide-react";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -15,6 +16,15 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [adEnabled, setAdEnabled] = useState(false);
+
+  useEffect(() => {
+    // Check if AD authentication is configured
+    fetch("/api/auth/ad/config")
+      .then(res => res.json())
+      .then(data => setAdEnabled(data.enabled))
+      .catch(() => setAdEnabled(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +45,22 @@ export default function Login() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleADLogin = async () => {
+    try {
+      const response = await fetch("/api/auth/ad/login");
+      const data = await response.json();
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch (error) {
+      toast({
+        title: "AD Login failed",
+        description: "Could not initiate Active Directory login",
+        variant: "destructive",
+      });
     }
   };
 
@@ -90,6 +116,28 @@ export default function Login() {
               Sign In
             </Button>
           </form>
+
+          {adEnabled && (
+            <>
+              <div className="relative my-4">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs text-muted-foreground">
+                  OR
+                </span>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleADLogin}
+                data-testid="button-ad-login"
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                Sign in with Active Directory
+              </Button>
+            </>
+          )}
 
         </CardContent>
       </Card>

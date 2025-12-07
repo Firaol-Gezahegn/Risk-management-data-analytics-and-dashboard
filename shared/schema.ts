@@ -17,23 +17,43 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// Risk records table
+// Risk records table - Enhanced with full RCSA fields
 export const riskRecords = pgTable("risk_records", {
   id: serial("id").primaryKey(),
+  riskId: text("risk_id").unique(), // Alphanumeric ID (e.g., CR-01, IT-05)
+  objectives: text("objectives"),
+  processKeyActivity: text("process_key_activity"),
+  riskTitle: text("risk_title").notNull(),
+  riskDescription: text("risk_description"),
+  rootCauses: text("root_causes"),
+  riskImpact: text("risk_impact"),
+  existingRiskControl: text("existing_risk_control"),
+  potentialRiskResponse: text("potential_risk_response"),
+  
+  // Legacy fields (kept for backward compatibility)
   riskType: text("risk_type").notNull(),
   riskCategory: text("risk_category").notNull(),
   businessUnit: text("business_unit").notNull(),
   department: text("department").notNull(),
+  
+  // Risk scoring
   likelihood: numeric("likelihood", { precision: 5, scale: 2 }).notNull(),
-  impact: numeric("impact", { precision: 5, scale: 2 }).notNull(),
+  levelOfImpact: numeric("level_of_impact", { precision: 5, scale: 2 }).notNull(),
+  impact: numeric("impact", { precision: 5, scale: 2 }).notNull(), // Legacy
   inherentRisk: numeric("inherent_risk", { precision: 10, scale: 2 }),
-  residualRisk: numeric("residual_risk", { precision: 10, scale: 2 }),
   riskScore: numeric("risk_score", { precision: 10, scale: 2 }),
+  
+  // Control effectiveness
+  controlEffectivenessScore: numeric("control_effectiveness_score", { precision: 5, scale: 2 }),
+  justification: text("justification"),
+  residualRisk: numeric("residual_risk", { precision: 10, scale: 2 }),
+  
   ownerId: varchar("owner_id").references(() => users.id),
   status: text("status").notNull().default("Open"), // Open, Mitigating, Closed
   dateReported: date("date_reported").notNull(),
-  description: text("description"),
-  mitigationPlan: text("mitigation_plan"),
+  description: text("description"), // Legacy
+  mitigationPlan: text("mitigation_plan"), // Legacy
+  isDeleted: boolean("is_deleted").notNull().default(false), // Soft delete
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -92,18 +112,22 @@ export const loginSchema = z.object({
 });
 
 export const insertRiskRecordSchema = createInsertSchema(riskRecords, {
+  riskTitle: z.string().min(1, "Risk title is required"),
   riskType: z.string().min(1),
   riskCategory: z.string().min(1),
   businessUnit: z.string().min(1),
   department: z.string().min(1),
   likelihood: z.coerce.number().min(0).max(100),
+  levelOfImpact: z.coerce.number().min(0).max(100),
   impact: z.coerce.number().min(0).max(100),
   inherentRisk: z.coerce.number().optional().nullable(),
   residualRisk: z.coerce.number().optional().nullable(),
   riskScore: z.coerce.number().optional().nullable(),
+  controlEffectivenessScore: z.coerce.number().optional().nullable(),
   status: z.enum(["Open", "Mitigating", "Closed"]),
   dateReported: z.string(),
-}).omit({ id: true, createdAt: true, updatedAt: true });
+  isDeleted: z.boolean().optional(),
+}).omit({ id: true, createdAt: true, updatedAt: true, riskId: true });
 
 export const insertIngestionStagingSchema = createInsertSchema(ingestionStaging).omit({
   id: true,
