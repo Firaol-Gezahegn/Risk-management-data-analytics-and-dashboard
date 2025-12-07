@@ -31,6 +31,8 @@ import { insertRiskRecordSchema, type RiskRecord } from "@shared/schema";
 import { Loader2, Calculator } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { z } from "zod";
+import { DepartmentSelect } from "@/components/department-select";
+import { RISK_CATEGORIES, RISK_STATUS } from "@shared/constants";
 
 // Enhanced schema with all new fields
 const enhancedRiskSchema = insertRiskRecordSchema.extend({
@@ -173,10 +175,16 @@ export default function RiskForm() {
   });
 
   const onSubmit = (data: any) => {
+    // Ensure impact is set to levelOfImpact value
+    const submitData = {
+      ...data,
+      impact: data.levelOfImpact,
+    };
+    
     if (isEditMode) {
-      updateMutation.mutate(data);
+      updateMutation.mutate(submitData);
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(submitData);
     }
   };
 
@@ -267,11 +275,11 @@ export default function RiskForm() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Operational">Operational</SelectItem>
-                              <SelectItem value="Financial">Financial</SelectItem>
-                              <SelectItem value="Strategic">Strategic</SelectItem>
-                              <SelectItem value="Compliance">Compliance</SelectItem>
-                              <SelectItem value="Technology">Technology</SelectItem>
+                              {RISK_CATEGORIES.map((category) => (
+                                <SelectItem key={category} value={category}>
+                                  {category}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -286,7 +294,10 @@ export default function RiskForm() {
                         <FormItem>
                           <FormLabel>Business Unit *</FormLabel>
                           <FormControl>
-                            <Input placeholder="e.g., Retail Banking" {...field} />
+                            <Input
+                              placeholder="Enter business unit"
+                              {...field}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -300,7 +311,11 @@ export default function RiskForm() {
                         <FormItem>
                           <FormLabel>Department *</FormLabel>
                           <FormControl>
-                            <Input placeholder="e.g., Information & IT Service" {...field} />
+                            <DepartmentSelect
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Select department"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -412,9 +427,11 @@ export default function RiskForm() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="Open">Open</SelectItem>
-                              <SelectItem value="Mitigating">Mitigating</SelectItem>
-                              <SelectItem value="Closed">Closed</SelectItem>
+                              {Object.values(RISK_STATUS).map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {status}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />

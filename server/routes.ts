@@ -15,6 +15,8 @@ import {
 } from "./auth-ad";
 import { computeRiskScores } from "@shared/risk-scoring";
 import { generateRiskId, regenerateRiskIdIfNeeded, getAllDepartmentCodes } from "./risk-id-generator";
+import { AccessControl } from "./access-control";
+import { ExcelImporter } from "./excel-import";
 
 const JWT_SECRET = process.env.JWT_SECRET || "awash-bank-risk-management-secret-key-change-in-production";
 const upload = multer({ storage: multer.memoryStorage() });
@@ -254,25 +256,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Risk records routes
   app.get("/api/risks", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+      const user = {
+        userId: req.userId!,
+        role: req.userRole!,
+        department: req.userDepartment!,
+      };
+
+      // Pagination parameters
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = (page - 1) * limit;
+
+      // Get department filter based on user access
+      const departmentFilter = AccessControl.getDepartmentFilter(user);
+      
       const risks = await storage.getAllRiskRecords({
-        department: req.userDepartment,
+        department: departmentFilter,
+        role: req.userRole,
+        limit,
+        offset,
+      });
+
+      // Get total count for pagination
+      const total = await storage.getRiskCount({
+        department: departmentFilter,
         role: req.userRole,
       });
-      res.json(risks);
+      
+      res.json({
+        data: risks,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
     } catch (error) {
+      console.error("Error fetching risks:", error);
       res.status(500).json({ message: "Server error" });
     }
   });
 
   app.get("/api/risks/statistics", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const filters =
-        req.userRole === "superadmin" || req.userRole === "auditor"
-          ? {}
-          : { department: req.userDepartment };
-      const stats = await storage.getRiskStatistics(filters);
+      const user = {
+        userId: req.userId!,
+        role: req.userRole!,
+        department: req.userDepartment!,
+      };
+
+      const departmentFilter = AccessControl.getDepartmentFilter(user);
+      const canSeeAll = AccessControl.canSeeAllStatistics(user);
+      
+      const stats = await storage.getRiskStatistics({
+        department: departmentFilter,
+        includeByDepartment: canSeeAll,
+      });
+      
       res.json(stats);
     } catch (error) {
+      console.error("Error fetching statistics:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Excel template download - MUST be before /api/risks/:id
+  app.get("/api/risks/template", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const template = [
+        {
+          'Risk Title': 'Example: Cybersecurity breach risk',
+          'Risk Type': 'Operational',
+          'Risk Category': 'Technology',
+          'Business Unit': 'Information Technology',
+          'Department': 'Information Technology',
+          'Status': 'Open',
+          'Date Reported': '2024-01-15',
+          'Objectives': 'Protect customer data and maintain system integrity',
+          'Process/Key Activity': 'Data storage and transmission processes',
+          'Risk Description': 'Potential unauthorized access to sensitive customer data',
+          'Root Causes': 'Outdated security protocols, insufficient access controls',
+          'Risk Impact': 'Financial loss, regulatory penalties, reputational damage',
+          'Existing Risk Control': 'Firewall, antivirus software, basic access controls',
+          'Potential Risk Response': 'Implement MFA, conduct penetration testing',
+          'Likelihood': 80,
+          'Impact': 90,
+          'Control Effectiveness': 60,
+          'Justification': 'High likelihood due to increasing cyber threats',
+          'Mitigation Plan': 'Phase 1: Security audit, Phase 2: Infrastructure upgrade',
+        },
+        {
+          'Risk Title': 'Example: Credit default risk',
+          'Risk Type': 'Financial',
+          'Risk Category': 'Credit',
+          'Business Unit': 'Credit',
+          'Department': 'Credit',
+          'Status': 'Mitigating',
+          'Date Reported': '2024-02-01',
+          'Objectives': 'Maintain healthy loan portfolio',
+          'Process/Key Activity': 'Credit assessment and loan approval',
+          'Risk Description': 'Risk of borrowers defaulting on loan obligations',
+          'Root Causes': 'Economic downturn, inadequate credit assessment',
+          'Risk Impact': 'Financial losses, increased provisions',
+          'Existing Risk Control': 'Credit scoring system, collateral requirements',
+          'Potential Risk Response': 'Enhanced due diligence, stricter criteria',
+          'Likelihood': 50,
+          'Impact': 70,
+          'Control Effectiveness': 40,
+          'Justification': 'Moderate likelihood based on economic indicators',
+          'Mitigation Plan': 'Implement enhanced credit scoring model',
+        },
+        {
+          'Risk Title': 'Example: Regulatory compliance violation',
+          'Risk Type': 'Regulatory',
+          'Risk Category': 'Compliance',
+          'Business Unit': 'Compliance',
+          'Department': 'Compliance',
+          'Status': 'Monitoring',
+          'Date Reported': '2024-03-10',
+          'Objectives': 'Ensure full compliance with banking regulations',
+          'Process/Key Activity': 'Regulatory reporting and compliance monitoring',
+          'Risk Description': 'Risk of non-compliance with AML/CFT regulations',
+          'Root Causes': 'Complex regulatory environment, manual processes',
+          'Risk Impact': 'Regulatory fines, license suspension',
+          'Existing Risk Control': 'Compliance team, regular training',
+          'Potential Risk Response': 'Implement compliance management system',
+          'Likelihood': 30,
+          'Impact': 80,
+          'Control Effectiveness': 70,
+          'Justification': 'Low likelihood due to strong controls',
+          'Mitigation Plan': 'Quarterly compliance reviews',
+        },
+      ];
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Template generation error:", error);
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -550,6 +670,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+
+  // Excel import/export routes
+  app.post(
+    "/api/risks/import/validate",
+    authMiddleware,
+    requireRole("superadmin", "risk_admin", "risk_team_full", "business_user"),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { data } = req.body;
+        
+        if (!Array.isArray(data) || data.length === 0) {
+          return res.status(400).json({ message: "No data provided" });
+        }
+
+        const result = await ExcelImporter.parseExcelData(data);
+        res.json(result);
+      } catch (error) {
+        console.error("Excel validation error:", error);
+        res.status(400).json({ message: "Validation failed" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/risks/import/execute",
+    authMiddleware,
+    requireRole("superadmin", "risk_admin", "risk_team_full"),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const { data } = req.body;
+        
+        if (!Array.isArray(data) || data.length === 0) {
+          return res.status(400).json({ message: "No data provided" });
+        }
+
+        const result = await ExcelImporter.parseExcelData(data);
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        // Import validated data
+        const imported = [];
+        for (const riskData of result.data) {
+          const risk = await storage.createRiskRecord(riskData);
+          imported.push(risk);
+        }
+
+        await logAudit(req.userId, "IMPORT_RISKS", "risk", undefined, {
+          count: imported.length,
+        });
+
+        res.json({
+          success: true,
+          imported: imported.length,
+          risks: imported,
+        });
+      } catch (error) {
+        console.error("Excel import error:", error);
+        res.status(500).json({ message: "Import failed" });
+      }
+    }
+  );
 
   // Collaborators routes
   app.get("/api/risks/:id/collaborators", authMiddleware, async (req: AuthRequest, res: Response) => {

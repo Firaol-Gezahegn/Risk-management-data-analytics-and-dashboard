@@ -9,7 +9,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
-  role: text("role").notNull(), // superadmin, risk_admin, business_user, reviewer, auditor
+  role: text("role").notNull(), // superadmin, risk_admin, risk_team_full, chief_office, business_user, reviewer, auditor
   department: text("department").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   mfaEnabled: boolean("mfa_enabled").notNull().default(false),
@@ -102,7 +102,7 @@ export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email(),
   name: z.string().min(2),
   passwordHash: z.string().min(8),
-  role: z.enum(["superadmin", "risk_admin", "business_user", "reviewer", "auditor"]),
+  role: z.enum(["superadmin", "risk_admin", "risk_team_full", "chief_office", "business_user", "reviewer", "auditor"]),
   department: z.string().min(2),
 }).omit({ id: true, createdAt: true, updatedAt: true });
 
@@ -171,10 +171,29 @@ export type AuthResponse = {
 
 export type RiskStatistics = {
   total: number;
+  veryHigh: number;
   high: number;
   medium: number;
   low: number;
+  veryLow: number;
   byStatus: Record<string, number>;
   byCategory: Record<string, number>;
+  byDepartment?: Record<string, number>;
   trend: Array<{ month: string; count: number }>;
+  topRisks?: Array<{
+    id: number;
+    riskId: string;
+    riskTitle: string;
+    inherentRisk: number;
+    department: string;
+  }>;
+  controlEffectiveness?: {
+    average: number;
+    byDepartment: Record<string, number>;
+  };
+  rcsaCompletion?: {
+    completed: number;
+    total: number;
+    percentage: number;
+  };
 };

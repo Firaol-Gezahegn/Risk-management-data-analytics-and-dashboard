@@ -40,11 +40,12 @@ export interface IStorage {
 
   // Risk Records
   getRiskRecord(id: number): Promise<RiskRecord | undefined>;
-  getAllRiskRecords(filters?: { department?: string; role?: string }): Promise<RiskRecord[]>;
+  getAllRiskRecords(filters?: { department?: string | null; role?: string; limit?: number; offset?: number }): Promise<RiskRecord[]>;
+  getRiskCount(filters?: { department?: string | null; role?: string }): Promise<number>;
   createRiskRecord(record: InsertRiskRecord & { riskId?: string }): Promise<RiskRecord>;
   updateRiskRecord(id: number, updates: Partial<RiskRecord>): Promise<RiskRecord | undefined>;
   deleteRiskRecord(id: number): Promise<boolean>;
-  getRiskStatistics(filters?: { department?: string }): Promise<RiskStatistics>;
+  getRiskStatistics(filters?: { department?: string | null; includeByDepartment?: boolean }): Promise<RiskStatistics>;
 
   // Collaborators
   getRiskCollaborators(riskId: number): Promise<any[]>;
@@ -120,17 +121,39 @@ export class DatabaseStorage implements IStorage {
     return record || undefined;
   }
 
-  async getAllRiskRecords(filters?: { department?: string; role?: string }): Promise<RiskRecord[]> {
+  async getAllRiskRecords(filters?: { department?: string | null; role?: string; limit?: number; offset?: number }): Promise<RiskRecord[]> {
     let query = db.select().from(riskRecords)
       .where(eq(riskRecords.isDeleted, false))
       .orderBy(desc(riskRecords.createdAt));
     
-    if (filters?.department && filters.role !== "superadmin" && filters.role !== "auditor") {
-      const records = await query;
+    // Apply pagination
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset) as any;
+    }
+    
+    const records = await query;
+    
+    // Filter by department if specified
+    if (filters?.department) {
       return records.filter(r => r.department === filters.department);
     }
     
-    return await query;
+    return records;
+  }
+
+  async getRiskCount(filters?: { department?: string | null; role?: string }): Promise<number> {
+    const records = await db.select().from(riskRecords)
+      .where(eq(riskRecords.isDeleted, false));
+    
+    // Filter by department if specified
+    if (filters?.department) {
+      return records.filter(r => r.department === filters.department).length;
+    }
+    
+    return records.length;
   }
 
   async createRiskRecord(record: InsertRiskRecord & { riskId?: string }): Promise<RiskRecord> {
@@ -144,16 +167,9 @@ export class DatabaseStorage implements IStorage {
   async updateRiskRecord(id: number, updates: Partial<RiskRecord>): Promise<RiskRecord | undefined> {
     let updateData: any = { ...updates, updatedAt: new Date() };
     
-    if (updates.likelihood !== undefined || updates.impact !== undefined) {
-      const current = await this.getRiskRecord(id);
-      if (current) {
-        const likelihood = updates.likelihood !== undefined ? Number(updates.likelihood) : Number(current.likelihood);
-        const impact = updates.impact !== undefined ? Number(updates.impact) : Number(current.impact);
-        const inherentRisk = (likelihood * impact) / 100;
-        updateData.inherentRisk = inherentRisk.toFixed(2);
-        updateData.riskScore = inherentRisk.toFixed(2);
-      }
-    }
+    // Note: Risk score calculations (inherentRisk, residualRisk, riskScore) are now
+    // handled in routes.ts using the 5x5 matrix from computeRiskScores()
+    // Do not recalculate here to avoid overriding the correct matrix-based values
     
     const [record] = await db
       .update(riskRecords)
@@ -235,7 +251,7 @@ export class DatabaseStorage implements IStorage {
     return newProgress;
   }
 
-  async getRiskStatistics(filters?: { department?: string }): Promise<RiskStatistics> {
+  async getRiskStatistics(filters?: { department?: string | null; includeByDepartment?: boolean }): Promise<RiskStatistics> {
     let records = await db.select().from(riskRecords).where(eq(riskRecords.isDeleted, false));
     
     if (filters?.department) {
@@ -248,16 +264,23 @@ export class DatabaseStorage implements IStorage {
       score: calculateRiskScore(record),
     }));
 
-    const high = scores.filter(({ score }) => score >= 70).length;
-    const medium = scores.filter(({ score }) => score >= 40 && score < 70).length;
-    const low = scores.filter(({ score }) => score < 40).length;
+    // Risk levels based on 5x5 matrix ratings
+    const veryHigh = scores.filter(({ score }) => score >= 83.33).length; // Matrix value 20-24
+    const high = scores.filter(({ score }) => score >= 62.5 && score < 83.33).length; // Matrix value 15-19
+    const medium = scores.filter(({ score }) => score >= 37.5 && score < 62.5).length; // Matrix value 9-14
+    const low = scores.filter(({ score }) => score >= 16.67 && score < 37.5).length; // Matrix value 4-8
+    const veryLow = scores.filter(({ score }) => score < 16.67).length; // Matrix value 0-3
 
     const byStatus: Record<string, number> = {};
     const byCategory: Record<string, number> = {};
+    const byDepartment: Record<string, number> = {};
     
     records.forEach(r => {
       byStatus[r.status] = (byStatus[r.status] || 0) + 1;
       byCategory[r.riskCategory] = (byCategory[r.riskCategory] || 0) + 1;
+      if (filters?.includeByDepartment) {
+        byDepartment[r.department] = (byDepartment[r.department] || 0) + 1;
+      }
     });
 
     const trend = [];
@@ -272,7 +295,72 @@ export class DatabaseStorage implements IStorage {
       trend.push({ month, count });
     }
 
-    return { total, high, medium, low, byStatus, byCategory, trend };
+    // Top risks (highest inherent risk scores)
+    const topRisks = scores
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(({ record }) => ({
+        id: record.id,
+        riskId: record.riskId || `#${record.id}`,
+        riskTitle: record.riskTitle || record.description || record.riskType || 'Untitled',
+        inherentRisk: Number(record.inherentRisk || 0),
+        department: record.department,
+      }));
+
+    // Control effectiveness
+    const recordsWithControl = records.filter(r => r.controlEffectivenessScore && Number(r.controlEffectivenessScore) > 0);
+    const avgControlEff = recordsWithControl.length > 0
+      ? recordsWithControl.reduce((sum, r) => sum + Number(r.controlEffectivenessScore), 0) / recordsWithControl.length
+      : 0;
+
+    const controlEffByDept: Record<string, number> = {};
+    if (filters?.includeByDepartment) {
+      const deptGroups: Record<string, number[]> = {};
+      recordsWithControl.forEach(r => {
+        if (!deptGroups[r.department]) deptGroups[r.department] = [];
+        deptGroups[r.department].push(Number(r.controlEffectivenessScore));
+      });
+      Object.entries(deptGroups).forEach(([dept, values]) => {
+        controlEffByDept[dept] = values.reduce((sum, v) => sum + v, 0) / values.length;
+      });
+    }
+
+    // RCSA completion
+    let rcsaCompletion = {
+      completed: 0,
+      total: records.length,
+      percentage: 0,
+    };
+    
+    try {
+      const assessments = await db.select().from(rcsaAssessments);
+      rcsaCompletion = {
+        completed: new Set(assessments.map(a => a.riskId)).size,
+        total: records.length,
+        percentage: records.length > 0 ? (new Set(assessments.map(a => a.riskId)).size / records.length) * 100 : 0,
+      };
+    } catch (error) {
+      console.error('Error fetching RCSA assessments:', error);
+    }
+
+    return { 
+      total,
+      veryHigh,
+      high, 
+      medium, 
+      low,
+      veryLow,
+      byStatus, 
+      byCategory, 
+      trend,
+      ...(filters?.includeByDepartment && { byDepartment }),
+      topRisks,
+      controlEffectiveness: {
+        average: avgControlEff,
+        byDepartment: controlEffByDept,
+      },
+      rcsaCompletion,
+    };
   }
 
   // Ingestion Staging

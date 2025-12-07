@@ -5,3 +5,12 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Utility scripts (keep locally, don't commit)
+*-database.js
+*-users.js
+check-*.js
+test-*.js
+fix-*.js
+verify-*.js
+clean-*.js

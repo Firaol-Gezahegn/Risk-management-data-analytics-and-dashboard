@@ -16,6 +16,7 @@ import Dashboard from "@/pages/dashboard";
 import RiskRegister from "@/pages/risks";
 import RiskForm from "@/pages/risk-form";
 import FileUpload from "@/pages/upload";
+import ExcelUpload from "@/pages/excel-upload";
 import Admin from "@/pages/admin";
 import Reports from "@/pages/reports";
 import NotFound from "@/pages/not-found";
@@ -77,15 +78,36 @@ function Router() {
           <main className="flex-1 overflow-auto p-6 bg-background">
             <div className="max-w-7xl mx-auto">
               <Switch>
-                <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
-                <Route path="/risks" component={() => <ProtectedRoute component={RiskRegister} />} />
-                <Route path="/risks/new" component={() => <ProtectedRoute component={RiskForm} />} />
-                <Route path="/risks/:id/edit" component={() => <ProtectedRoute component={RiskForm} />} />
-                <Route path="/risks/:id/details" component={() => <ProtectedRoute component={RiskForm} />} />
-                <Route path="/upload" component={() => <ProtectedRoute component={FileUpload} />} />
-                <Route path="/reports" component={() => <ProtectedRoute component={Reports} />} />
-                <Route path="/admin" component={() => <ProtectedRoute component={Admin} />} />
-                <Route component={NotFound} />
+                <Route path="/">
+                  <ProtectedRoute component={Dashboard} />
+                </Route>
+                <Route path="/risks">
+                  <ProtectedRoute component={RiskRegister} />
+                </Route>
+                <Route path="/risks/new">
+                  <ProtectedRoute component={RiskForm} />
+                </Route>
+                <Route path="/risks/:id/edit">
+                  <ProtectedRoute component={RiskForm} />
+                </Route>
+                <Route path="/risks/:id/details">
+                  <ProtectedRoute component={RiskForm} />
+                </Route>
+                <Route path="/upload">
+                  <ProtectedRoute component={ExcelUpload} />
+                </Route>
+                <Route path="/excel-import">
+                  <ProtectedRoute component={ExcelUpload} />
+                </Route>
+                <Route path="/reports">
+                  <ProtectedRoute component={Reports} />
+                </Route>
+                <Route path="/admin">
+                  <ProtectedRoute component={Admin} />
+                </Route>
+                <Route>
+                  <NotFound />
+                </Route>
               </Switch>
             </div>
           </main>

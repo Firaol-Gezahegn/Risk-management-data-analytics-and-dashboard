@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
-import { Shield, AlertTriangle, CheckCircle, TrendingUp, Activity } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle, TrendingUp, Activity, AlertOctagon, ShieldCheck, Target } from "lucide-react";
 import { LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import type { RiskStatistics } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 
 const COLORS = {
   high: "hsl(var(--destructive))",
@@ -56,32 +57,85 @@ export default function Dashboard() {
         <p className="text-muted-foreground mt-2">Overview of risk management metrics</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <StatCard
           title="Total Risks"
           value={stats?.total || 0}
           icon={Shield}
-          trend={{ value: 8, isPositive: false }}
+        />
+        <StatCard
+          title="Very High"
+          value={stats?.veryHigh || 0}
+          icon={AlertOctagon}
+          className="border-red-500/30 bg-red-50 dark:bg-red-950/20"
         />
         <StatCard
           title="High Risk"
           value={stats?.high || 0}
           icon={AlertTriangle}
-          className="border-destructive/20"
+          className="border-orange-500/30 bg-orange-50 dark:bg-orange-950/20"
         />
         <StatCard
-          title="Medium Risk"
+          title="Medium"
           value={stats?.medium || 0}
           icon={Activity}
-          className="border-secondary/20"
+          className="border-yellow-500/30 bg-yellow-50 dark:bg-yellow-950/20"
         />
         <StatCard
           title="Low Risk"
           value={stats?.low || 0}
           icon={CheckCircle}
-          className="border-primary/20"
+          className="border-blue-500/30 bg-blue-50 dark:bg-blue-950/20"
+        />
+        <StatCard
+          title="Very Low"
+          value={stats?.veryLow || 0}
+          icon={ShieldCheck}
+          className="border-green-500/30 bg-green-50 dark:bg-green-950/20"
         />
       </div>
+
+      {/* Control Effectiveness Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            Control Effectiveness
+          </CardTitle>
+          <CardDescription>Average effectiveness of risk controls across the organization</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Overall Control Effectiveness</span>
+                <span className="text-2xl font-bold">{(stats?.controlEffectiveness?.average || 0).toFixed(1)}%</span>
+              </div>
+              <Progress value={stats?.controlEffectiveness?.average || 0} className="h-3" />
+              <p className="text-xs text-muted-foreground mt-2">
+                {stats?.controlEffectiveness?.average >= 70 ? '✓ Strong controls in place' : 
+                 stats?.controlEffectiveness?.average >= 50 ? '⚠ Moderate control effectiveness' : 
+                 '⚠ Controls need improvement'}
+              </p>
+            </div>
+            
+            {stats?.rcsaCompletion && (
+              <div className="pt-4 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">RCSA Completion</span>
+                  <span className="text-lg font-semibold">
+                    {stats.rcsaCompletion.completed} / {stats.rcsaCompletion.total}
+                  </span>
+                </div>
+                <Progress value={stats.rcsaCompletion.percentage} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.rcsaCompletion.percentage.toFixed(0)}% of risks have completed RCSA assessments
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

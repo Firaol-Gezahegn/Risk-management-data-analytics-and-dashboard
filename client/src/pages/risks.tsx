@@ -35,17 +35,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DepartmentFilter } from "@/components/department-select";
+import { RISK_CATEGORIES, RISK_STATUS } from "@shared/constants";
 
 export default function RiskRegister() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { data: risks, isLoading } = useQuery<RiskRecord[]>({
+  const { data: risksResponse, isLoading } = useQuery<{
+    data: RiskRecord[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }>({
     queryKey: ["/api/risks"],
   });
+
+  const risks = risksResponse?.data || [];
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/risks/${id}`),
@@ -73,7 +86,7 @@ export default function RiskRegister() {
     return { label: "Low", variant: "default" as const };
   };
 
-  const filteredRisks = (risks || []).filter((risk) => {
+  const filteredRisks = risks.filter((risk) => {
     const searchText = search.toLowerCase();
     const matchesSearch =
       search === "" ||
@@ -83,7 +96,8 @@ export default function RiskRegister() {
       (risk.department && risk.department.toLowerCase().includes(searchText));
     const matchesStatus = statusFilter === "all" || risk.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || risk.riskCategory === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
+    const matchesDepartment = departmentFilter === "all" || risk.department === departmentFilter;
+    return matchesSearch && matchesStatus && matchesCategory && matchesDepartment;
   });
 
   const exportToCSV = () => {
@@ -148,6 +162,7 @@ export default function RiskRegister() {
                   data-testid="input-search"
                 />
               </div>
+              <DepartmentFilter value={departmentFilter} onValueChange={setDepartmentFilter} />
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
                   <Filter className="mr-2 h-4 w-4" />
@@ -155,9 +170,11 @@ export default function RiskRegister() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Open">Open</SelectItem>
-                  <SelectItem value="Mitigating">Mitigating</SelectItem>
-                  <SelectItem value="Closed">Closed</SelectItem>
+                  {Object.values(RISK_STATUS).map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -167,11 +184,11 @@ export default function RiskRegister() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="Operational">Operational</SelectItem>
-                  <SelectItem value="Financial">Financial</SelectItem>
-                  <SelectItem value="Strategic">Strategic</SelectItem>
-                  <SelectItem value="Compliance">Compliance</SelectItem>
-                  <SelectItem value="Technology">Technology</SelectItem>
+                  {RISK_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button variant="outline" onClick={exportToCSV} data-testid="button-export">
@@ -190,10 +207,14 @@ export default function RiskRegister() {
                   <TableHead>Title</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Department</TableHead>
+                  <TableHead>Owner</TableHead>
                   <TableHead className="text-right">Likelihood</TableHead>
                   <TableHead className="text-right">Impact</TableHead>
-                  <TableHead className="text-right">Risk Score</TableHead>
+                  <TableHead className="text-right">Inherent Risk</TableHead>
+                  <TableHead className="text-right">Control Eff.</TableHead>
+                  <TableHead className="text-right">Residual Risk</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -206,25 +227,43 @@ export default function RiskRegister() {
                   </TableRow>
                 ) : (
                   filteredRisks.map((risk) => {
-                    const score = Number(risk.riskScore || risk.inherentRisk || 0);
-                    const level = getRiskLevel(score);
+                    const inherentScore = Number(risk.inherentRisk || 0);
+                    const residualScore = Number(risk.residualRisk || 0);
+                    const controlEff = Number(risk.controlEffectivenessScore || 0);
+                    
+                    const inherentLevel = getRiskLevel(inherentScore);
+                    const residualLevel = getRiskLevel(residualScore);
+                    
                     const displayTitle = risk.riskTitle || risk.description || risk.riskType || 'Untitled';
                     const displayId = risk.riskId || `#${risk.id}`;
+                    const createdDate = new Date(risk.createdAt).toLocaleDateString();
                     
                     return (
                       <TableRow key={risk.id} data-testid={`row-risk-${risk.id}`}>
                         <TableCell className="font-medium">{displayId}</TableCell>
-                        <TableCell className="max-w-xs truncate">{displayTitle}</TableCell>
+                        <TableCell className="max-w-xs truncate" title={displayTitle}>{displayTitle}</TableCell>
                         <TableCell>{risk.riskCategory}</TableCell>
                         <TableCell>{risk.department}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {risk.ownerId ? 'Assigned' : 'Unassigned'}
+                        </TableCell>
                         <TableCell className="text-right">{Number(risk.likelihood).toFixed(0)}</TableCell>
                         <TableCell className="text-right">{Number(risk.impact || risk.levelOfImpact || 0).toFixed(0)}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant={level.variant}>{score.toFixed(0)}</Badge>
+                          <Badge variant={inherentLevel.variant}>{inherentScore.toFixed(0)}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {controlEff > 0 ? `${controlEff.toFixed(0)}%` : '-'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {residualScore > 0 ? (
+                            <Badge variant={residualLevel.variant}>{residualScore.toFixed(0)}</Badge>
+                          ) : '-'}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{risk.status}</Badge>
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{createdDate}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Link href={`/risks/${risk.id}/edit`}>
