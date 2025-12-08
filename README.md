@@ -1,4 +1,4 @@
-# Awash Bank Risk Management Dashboard
+#Risk Management Dashboard
 
 A comprehensive enterprise risk management system built for Awash Bank with role-based access control, 5×5 risk matrix scoring, and advanced analytics.
 
