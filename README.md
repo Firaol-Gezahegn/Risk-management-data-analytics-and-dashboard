@@ -176,12 +176,7 @@ npm run migrate      # Run database migrations
 
 
 
-## 🤝 Support
 
-For issues or questions:
-1. Check the documentation in `/docs`
-2. Review the setup guides
-3. Contact the development team
 
 
 
