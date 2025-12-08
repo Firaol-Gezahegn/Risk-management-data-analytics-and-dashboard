@@ -38,13 +38,13 @@ const navigationItems = [
     title: "Reports",
     url: "/reports",
     icon: FileText,
-    roles: ["admin", "risk_manager", "chief_office", "user"],
+    roles: ["admin", "risk_manager"], // Only admin and risk_manager
   },
   {
     title: "Admin",
     url: "/admin",
     icon: Users,
-    roles: ["admin"],
+    roles: ["admin"], // Only admin
   },
 ];
 
@@ -77,18 +77,25 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {filteredItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url}>
-                    <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(" ", "-")}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {filteredItems.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                <p>No navigation items available</p>
+                <p className="text-xs mt-1">Role: {user?.role || "unknown"}</p>
+              </div>
+            ) : (
+              <SidebarMenu>
+                {filteredItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={location === item.url}>
+                      <Link href={item.url} data-testid={`link-${item.title.toLowerCase().replace(" ", "-")}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

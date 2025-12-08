@@ -26,21 +26,16 @@ export type DepartmentName = typeof DEPARTMENTS[number]['name'];
 // Role definitions with access levels
 export const ROLES = {
   // Full system access
-  SUPER_ADMIN: 'superadmin',
+  ADMIN: 'admin',
   
   // Risk department - full access to all risks
-  RISK_ADMIN: 'risk_admin',
-  RISK_TEAM_FULL: 'risk_team_full',
+  RISK_MANAGER: 'risk_manager',
   
   // Chief Office roles - access to their department only
   CHIEF_OFFICE: 'chief_office',
   
-  // Department users - access to their department only
-  BUSINESS_USER: 'business_user',
-  
-  // Review and audit - read-only access
-  REVIEWER: 'reviewer',
-  AUDITOR: 'auditor',
+  // Department users - read-only access
+  USER: 'user',
 } as const;
 
 export type UserRole = typeof ROLES[keyof typeof ROLES];
@@ -54,36 +49,30 @@ export const ACCESS_LEVELS = {
 
 // Role to access level mapping
 export const ROLE_ACCESS_MAP: Record<string, string> = {
-  [ROLES.SUPER_ADMIN]: ACCESS_LEVELS.FULL,
-  [ROLES.RISK_ADMIN]: ACCESS_LEVELS.FULL,
-  [ROLES.RISK_TEAM_FULL]: ACCESS_LEVELS.FULL,
-  [ROLES.AUDITOR]: ACCESS_LEVELS.FULL, // Can see all but read-only
+  [ROLES.ADMIN]: ACCESS_LEVELS.FULL,
+  [ROLES.RISK_MANAGER]: ACCESS_LEVELS.FULL,
   [ROLES.CHIEF_OFFICE]: ACCESS_LEVELS.DEPARTMENT,
-  [ROLES.BUSINESS_USER]: ACCESS_LEVELS.DEPARTMENT,
-  [ROLES.REVIEWER]: ACCESS_LEVELS.READ_ONLY,
+  [ROLES.USER]: ACCESS_LEVELS.READ_ONLY,
 };
 
 // Roles that can see all risks regardless of department
 export const FULL_ACCESS_ROLES = [
-  ROLES.SUPER_ADMIN,
-  ROLES.RISK_ADMIN,
-  ROLES.RISK_TEAM_FULL,
-  ROLES.AUDITOR,
+  ROLES.ADMIN,
+  ROLES.RISK_MANAGER,
 ];
 
 // Roles that can edit risks
 export const CAN_EDIT_ROLES = [
-  ROLES.SUPER_ADMIN,
-  ROLES.RISK_ADMIN,
-  ROLES.RISK_TEAM_FULL,
+  ROLES.ADMIN,
+  ROLES.RISK_MANAGER,
   ROLES.CHIEF_OFFICE,
-  ROLES.BUSINESS_USER,
 ];
 
 // Roles that can delete risks
 export const CAN_DELETE_ROLES = [
-  ROLES.SUPER_ADMIN,
-  ROLES.RISK_ADMIN,
+  ROLES.ADMIN,
+  ROLES.RISK_MANAGER,
+  ROLES.CHIEF_OFFICE,
 ];
 
 // Risk status options

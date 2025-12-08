@@ -102,7 +102,7 @@ export class AccessControl {
    */
   static canManageRCSA(user: UserContext): boolean {
     // Risk team and admins can manage RCSA
-    return ['superadmin', 'risk_admin', 'risk_team_full', 'chief_office'].includes(user.role);
+    return ['admin', 'risk_manager', 'chief_office'].includes(user.role);
   }
 
   /**
@@ -123,14 +123,14 @@ export class AccessControl {
    * Check if user can upload files
    */
   static canUploadFiles(user: UserContext): boolean {
-    return ['superadmin', 'risk_admin', 'risk_team_full', 'business_user'].includes(user.role);
+    return ['admin', 'risk_manager', 'chief_office'].includes(user.role);
   }
 
   /**
    * Check if user can manage users
    */
   static canManageUsers(user: UserContext): boolean {
-    return user.role === 'superadmin';
+    return user.role === 'admin';
   }
 
   /**

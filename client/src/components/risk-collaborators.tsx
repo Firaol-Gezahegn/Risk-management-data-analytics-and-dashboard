@@ -23,7 +23,7 @@ export function RiskCollaborators({ riskId }: RiskCollaboratorsProps) {
   const { toast } = useToast();
   const [selectedUserId, setSelectedUserId] = useState<string>("");
 
-  const { data: collaborators = [], isLoading: loadingCollaborators } = useQuery({
+  const { data: collaborators = [], isLoading: loadingCollaborators } = useQuery<any[]>({
     queryKey: [`/api/risks/${riskId}/collaborators`],
   });
 
