@@ -15,7 +15,7 @@ import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import RiskRegister from "@/pages/risks";
 import RiskForm from "@/pages/risk-form";
-import FileUpload from "@/pages/upload";
+
 import ExcelUpload from "@/pages/excel-upload";
 import Admin from "@/pages/admin";
 import Reports from "@/pages/reports";

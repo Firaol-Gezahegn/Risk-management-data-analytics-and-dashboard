@@ -27,10 +27,9 @@ export default function ExcelUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
-  const [useStaging, setUseStaging] = useState(true); // Toggle for staging vs direct import
 
   const validateMutation = useMutation({
-    mutationFn: (data: any[]) => apiRequest("POST", "/api/risks/import/validate", { data }),
+    mutationFn: (data: any[]) => apiRequest("POST", "/api/risks/import/validate", { data }) as unknown as Promise<ValidationResult>,
     onSuccess: (result: ValidationResult) => {
       setValidationResult(result);
       if (result.success) {
@@ -56,7 +55,7 @@ export default function ExcelUpload() {
   });
 
   const importMutation = useMutation({
-    mutationFn: (data: any[]) => apiRequest("POST", "/api/risks/import/execute", { data }),
+    mutationFn: (data: any[]) => apiRequest("POST", "/api/risks/import/execute", { data }) as unknown as Promise<any>,
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/risks"] });
       queryClient.invalidateQueries({ queryKey: ["/api/risks/statistics"] });
@@ -179,24 +178,6 @@ export default function ExcelUpload() {
       title: "Template Downloaded",
       description: "Excel template with 3 example rows has been downloaded",
     });
-  };
-
-  const handleDownloadTemplateOld = async () => {
-    try {
-      const response = await apiRequest("GET", "/api/risks/template");
-      const template = response as any[];
-      const ws = XLSX.utils.json_to_sheet(template);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Risk Template");
-      XLSX.writeFile(wb, "Risk_Import_Template.xlsx");
-      toast({ title: "Template Downloaded" });
-    } catch (error) {
-      toast({
-        title: "Download Failed",
-        description: "Failed to download template",
-        variant: "destructive",
-      });
-    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

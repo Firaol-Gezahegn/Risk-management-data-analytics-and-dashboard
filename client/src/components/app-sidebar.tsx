@@ -20,31 +20,31 @@ const navigationItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-    roles: ["superadmin", "risk_admin", "business_user", "reviewer", "auditor"],
+    roles: ["admin", "risk_manager", "chief_office", "user"],
   },
   {
     title: "Risk Register",
     url: "/risks",
     icon: Shield,
-    roles: ["superadmin", "risk_admin", "business_user", "reviewer", "auditor"],
+    roles: ["admin", "risk_manager", "chief_office", "user"],
   },
   {
-    title: "File Upload",
-    url: "/upload",
+    title: "Excel Import",
+    url: "/excel-import",
     icon: Upload,
-    roles: ["superadmin", "risk_admin", "business_user"],
+    roles: ["admin", "risk_manager", "chief_office"],
   },
   {
     title: "Reports",
     url: "/reports",
     icon: FileText,
-    roles: ["superadmin", "risk_admin", "reviewer", "auditor"],
+    roles: ["admin", "risk_manager", "chief_office", "user"],
   },
   {
     title: "Admin",
     url: "/admin",
     icon: Users,
-    roles: ["superadmin"],
+    roles: ["admin"],
   },
 ];
 

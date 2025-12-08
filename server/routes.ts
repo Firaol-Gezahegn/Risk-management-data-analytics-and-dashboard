@@ -321,6 +321,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/risks/dashboard-data", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = {
+        userId: req.userId!,
+        role: req.userRole!,
+        department: req.userDepartment!,
+      };
+
+      const departmentFilter = AccessControl.getDepartmentFilter(user);
+      const data = await storage.getDashboardData({
+        department: departmentFilter,
+      });
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   // Excel template download - MUST be before /api/risks/:id
   app.get("/api/risks/template", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {

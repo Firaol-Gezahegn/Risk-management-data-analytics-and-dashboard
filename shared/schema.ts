@@ -197,3 +197,23 @@ export type RiskStatistics = {
     percentage: number;
   };
 };
+
+export type DashboardData = {
+  risks: Array<{
+    id: number;
+    riskId: string;
+    riskTitle: string;
+    department: string;
+    likelihood: number;
+    impact: number;
+    inherentRisk: number;
+    residualRisk: number | null;
+    controlEffectiveness: number | null;
+    riskScore: number;
+  }>;
+  departmentControls: Array<{
+    department: string;
+    avgControlEffectiveness: number;
+    riskCount: number;
+  }>;
+};

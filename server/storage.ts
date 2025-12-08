@@ -46,6 +46,7 @@ export interface IStorage {
   updateRiskRecord(id: number, updates: Partial<RiskRecord>): Promise<RiskRecord | undefined>;
   deleteRiskRecord(id: number): Promise<boolean>;
   getRiskStatistics(filters?: { department?: string | null; includeByDepartment?: boolean }): Promise<RiskStatistics>;
+  getDashboardData(filters?: { department?: string | null }): Promise<any>;
 
   // Collaborators
   getRiskCollaborators(riskId: number): Promise<any[]>;
@@ -361,6 +362,49 @@ export class DatabaseStorage implements IStorage {
       },
       rcsaCompletion,
     };
+  }
+
+  async getDashboardData(filters?: { department?: string | null }): Promise<any> {
+    let records = await db.select().from(riskRecords).where(eq(riskRecords.isDeleted, false));
+    
+    if (filters?.department) {
+      records = records.filter(r => r.department === filters.department);
+    }
+
+    // Map risks for visualization
+    const risks = records.map(r => ({
+      id: r.id,
+      riskId: r.riskId || `#${r.id}`,
+      riskTitle: r.riskTitle || 'Untitled',
+      department: r.department,
+      likelihood: Number(r.likelihood || 0),
+      impact: Number(r.impact || 0),
+      inherentRisk: Number(r.inherentRisk || 0),
+      residualRisk: r.residualRisk ? Number(r.residualRisk) : null,
+      controlEffectiveness: r.controlEffectivenessScore ? Number(r.controlEffectivenessScore) : null,
+      riskScore: Number(r.riskScore || 0),
+    }));
+
+    // Calculate department-level control effectiveness
+    const deptMap: Record<string, { total: number; count: number; risks: number }> = {};
+    records.forEach(r => {
+      if (!deptMap[r.department]) {
+        deptMap[r.department] = { total: 0, count: 0, risks: 0 };
+      }
+      deptMap[r.department].risks++;
+      if (r.controlEffectivenessScore) {
+        deptMap[r.department].total += Number(r.controlEffectivenessScore);
+        deptMap[r.department].count++;
+      }
+    });
+
+    const departmentControls = Object.entries(deptMap).map(([department, data]) => ({
+      department,
+      avgControlEffectiveness: data.count > 0 ? data.total / data.count : 0,
+      riskCount: data.risks,
+    }));
+
+    return { risks, departmentControls };
   }
 
   // Ingestion Staging
