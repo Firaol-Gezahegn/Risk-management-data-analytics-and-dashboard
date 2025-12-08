@@ -34,9 +34,7 @@ npm run dev    # Development mode
 npm start      # Production mode
 ```
 
-5. **Access the application:**
-- URL: http://localhost:5000
-- Admin: admin@awashbank.com / admin123
+
 
 ## 📋 Features
 
@@ -144,18 +142,6 @@ Inherent Risk = Matrix[Likelihood Index][Impact Index]
 Residual Risk = Inherent Risk × (1 - Control Effectiveness / 100)
 ```
 
-## 🔐 Default Users
-
-### Admin Account
-- Email: admin@awashbank.com
-- Password: admin123
-- Role: superadmin
-
-### Department Chiefs
-- Email: [department]@awashbank.com
-- Password: password123
-- Role: chief_office
-- Example: wholesalebanking@awashbank.com
 
 ## 🛠️ Utility Scripts
 
@@ -175,14 +161,7 @@ npm run build        # Build for production
 npm run migrate      # Run database migrations
 ```
 
-## 📖 Documentation
 
-- **[Setup Guide](docs/SETUP_GUIDE.md)** - Detailed installation instructions
-- **[Migration Guide](docs/MIGRATION_GUIDE.md)** - Database migration guide
-- **[Quick Start](docs/QUICK_START.md)** - Get started quickly
-- **[Excel Import Guide](EXCEL_IMPORT_GUIDE.md)** - Excel import instructions
-- **[Technical Overview](docs/technical-overview.md)** - System architecture
-- **[Design Guidelines](docs/design_guidelines.md)** - UI/UX guidelines
 
 ## 🔄 Recent Updates
 
@@ -195,7 +174,7 @@ npm run migrate      # Run database migrations
 - ✅ Business unit changed to text input
 - ✅ Impact field calculation fixed
 
-See [SYSTEM_RESET_SUMMARY.md](SYSTEM_RESET_SUMMARY.md) for complete details.
+
 
 ## 🤝 Support
 
@@ -204,10 +183,8 @@ For issues or questions:
 2. Review the setup guides
 3. Contact the development team
 
-## 📝 License
 
-Proprietary - Awash Bank Internal Use Only
 
----
 
-**Built with ❤️ for Awash Bank**
+
+
